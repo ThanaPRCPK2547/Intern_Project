@@ -1,2 +1,18 @@
-fastapi==0.116.0
-uvicorn==0.35.0
+#requirements.txt ที่จะติดตั้งLIBเวอร์ชั่นล่าสุดของ 2025-10-05
+#--- Core & Scheduling ---
+requests==2.32.5
+python-dotenv==1.1.1
+APScheduler==3.11.0
+tzdata==2025.2
+
+#--- Database (MySQL) ---
+mysql-connector-python==9.4.0
+
+#--- Data & Plot (โปรเซสที่ 2) ---
+pandas==2.3.3
+matplotlib==3.10.6
+#ถ้าจะทำกราฟแท่งเทียน mplfinance==0.12.10b0
+
+#--- API Server (โปรเซสที่ 3/อ่านข้อมูล) ---
+fastapi==0.118.0
+uvicorn[standard]==0.37.0

@@ -1,55 +1,148 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="th">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Development Project</title>
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Stock BI Dashboard (Real-time)</title>
+  <style>
+    :root{--bg:#0b0f14;--panel:#111822;--muted:#8aa0b4;--text:#e8f0f7;--accent:#4cc9f0;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,Segoe UI,Roboto,Arial}
+    header{display:flex;align-items:center;gap:16px;padding:16px 20px;background:linear-gradient(180deg,#0e1621,#0b0f14)}
+    h1{font-size:18px;margin:0}
+    .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
+    .controls{margin-left:auto;display:flex;gap:8px;align-items:center}
+    select,input,button{background:#0f1723;border:1px solid #223043;color:var(--text);padding:8px 10px;border-radius:10px}
+    button{cursor:pointer}
+    main{padding:18px;max-width:1200px;margin:0 auto}
+    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+    .card{background:var(--panel);border:1px solid #213046;border-radius:16px;padding:14px}
+    .kpi .label{color:var(--muted);font-size:12px}
+    .kpi .value{font-size:22px;font-weight:700}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+    .chart-card img{width:100%;height:180px;object-fit:contain;background:#0a0f15;border-radius:10px;border:1px solid #1d2838}
+    .chart-meta{display:flex;justify-content:space-between;align-items:baseline;margin-top:8px}
+    .symbol{font-weight:700}
+    .badge{font-size:12px;color:#a7bdcf;border:1px solid #2a3b50;padding:2px 6px;border-radius:8px}
+    .chg{font-weight:700}
+    .chg.pos{color:var(--ok)} .chg.neg{color:var(--bad)} .muted{color:var(--muted)}
+    footer{padding:16px;color:#7f93a6;text-align:center}
+    @media (max-width:800px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  </style>
 </head>
 <body>
-    <header>
-        <h1>Welcome to My Web Development Project</h1>
-        <nav>
-            <ul>
-                <li><a href="#home">Home</a></li>
-                <li><a href="#about">About</a></li>
-                <li><a href="#services">Services</a></li>
-                <li><a href="#contact">Contact</a></li>
-                <li><a href=""
-            </ul>
-        </nav>
-    </header>
+  <header>
+    <div class="dot" id="live-dot" title="Live"></div>
+    <h1>Stock BI Dashboard</h1>
+    <div class="controls">
+      <label class="muted">Symbol:</label>
+      <select id="symbolFilter"><option value="">All</option></select>
+      <input id="q" placeholder="ค้นหา (เช่น AAPL, 5min)" />
+      <button id="refreshBtn">Refresh</button>
+      <span id="nextTick" class="muted">next in —</span>
+    </div>
+  </header>
 
-    <section id="home">
-        <h2>Home</h2>
-        <p>This is the home section of the web development project.</p>
+  <main>
+    <section class="kpis">
+      <div class="card kpi"><div class="label">Last Build (UTC)</div><div class="value" id="kpiBuild">—</div></div>
+      <div class="card kpi"><div class="label">Total Symbols</div><div class="value" id="kpiSymbols">—</div></div>
+      <div class="card kpi"><div class="label">Charts</div><div class="value" id="kpiCharts">—</div></div>
+      <div class="card kpi"><div class="label">Top Gainer</div><div class="value" id="kpiTop">—</div></div>
     </section>
 
-    <section id="about">
-        <h2>About</h2>
-        <p>This section provides information about the project and its goals.</p>
-    </section>
+    <section id="grid" class="grid"></section>
+  </main>
 
-    <section id="services">
-        <h2>Services</h2>
-        <p>Details about the services offered in this project.</p>
-    </section>
+  <footer>Auto-refresh every <span id="freq">5</span> min · <span class="muted">Please Wait</span></footer>
 
-    <section id="contact">
-        <h2>Contact</h2>
-        <form action="#" method="post">
-            <label for="name">Name:</label>
-            <input type="text" id="name" name="name" required>
-            <br>
-            <label for="email">Email:</label>
-            <input type="email" id="email" name="email" required>
-            <br>
-            <input type="submit" value="Submit">
-        </form>
-    </section>
+  <script>
+    const MANIFEST_URL = "output/manifest.json";
+    let REFRESH_MS = 5 * 60 * 1000; // default 5 นาที
+    let countdown = REFRESH_MS/1000, timer;
 
-    <footer>
-        <p>&copy; 2024 My Web Development Project</p>
-    </footer>
+    const el = sel => document.querySelector(sel);
+    const grid = el('#grid'), symbolFilter = el('#symbolFilter');
+
+    async function fetchJSON(url, timeout=15000){
+      const ctrl = new AbortController(); const id = setTimeout(()=>ctrl.abort(), timeout);
+      try{ const r = await fetch(url, {signal: ctrl.signal, cache:'no-store'}); if(!r.ok) throw new Error(r.status); return await r.json();}
+      finally{ clearTimeout(id); }
+    }
+
+    function formatUTC(s){ try{ return new Date(s+"Z").toISOString().replace('T',' ').slice(0,19);}catch{ return s||'—'; } }
+
+    function bust(url, v){ const sep = url.includes('?') ? '&' : '?'; return `${url}${sep}v=${encodeURIComponent(v)}` }
+
+    function render(man){
+      // KPIs
+      el('#kpiBuild').textContent = formatUTC(man.generated_at_utc || man.build_id);
+      el('#kpiSymbols').textContent = (man.summary?.total_symbols) ?? new Set(man.charts.map(c=>c.symbol)).size;
+      el('#kpiCharts').textContent = man.charts.length;
+      const top = man.summary?.top_gainer;
+      el('#kpiTop').textContent = top ? `${top.symbol} (${top.change_pct.toFixed(2)}%)` : '—';
+
+      // Symbol filter options
+      const symbols = Array.from(new Set(man.charts.map(c=>c.symbol))).sort();
+      symbolFilter.innerHTML = '<option value="">All</option>' + symbols.map(s=>`<option>${s}</option>`).join('');
+
+      // Render cards
+      const q = el('#q').value.trim().toLowerCase();
+      const sel = symbolFilter.value;
+
+      grid.innerHTML = '';
+      man.charts
+        .filter(c => (!sel || c.symbol===sel))
+        .filter(c => !q || (c.symbol+c.interval).toLowerCase().includes(q))
+        .sort((a,b)=> (b.metrics?.change_pct ?? 0) - (a.metrics?.change_pct ?? 0))
+        .forEach(c=>{
+          const card = document.createElement('div');
+          card.className='card chart-card';
+          const chg = Number(c.metrics?.change_pct ?? 0);
+          const sign = chg>=0 ? 'pos' : 'neg';
+          card.innerHTML = `
+            <img loading="lazy" src="${bust(c.image, man.build_id)}" alt="${c.symbol} ${c.interval}">
+            <div class="chart-meta">
+              <div>
+                <div class="symbol">${c.symbol} <span class="badge">${c.interval}</span></div>
+                <div class="muted">Last point: ${formatUTC(c.last_point_utc||'')}</div>
+              </div>
+              <div class="chg ${sign}">${(chg>=0?'+':'')}${chg.toFixed(2)}%</div>
+            </div>
+          `;
+          grid.appendChild(card);
+        });
+    }
+
+    async function load(){
+      try{
+        const man = await fetchJSON(MANIFEST_URL + `?t=${Date.now()}`);
+        if (man.refresh_suggested_sec) REFRESH_MS = man.refresh_suggested_sec * 1000;
+        el('#freq').textContent = Math.round(REFRESH_MS/60000);
+        render(man);
+        heartbeat(true);
+      }catch(e){
+        grid.innerHTML = `<div class="card">โหลดข้อมูลไม่สำเร็จ: ${e}</div>`;
+        heartbeat(false);
+      }
+    }
+
+    function heartbeat(ok){
+      el('#live-dot').style.background = ok ? 'var(--ok)' : 'var(--bad)';
+      if (timer) clearInterval(timer);
+      countdown = Math.round(REFRESH_MS/1000);
+      el('#nextTick').textContent = `next in ${countdown}s`;
+      timer = setInterval(()=>{
+        countdown--; if (countdown<=0){ clearInterval(timer); load(); return; }
+        el('#nextTick').textContent = `next in ${countdown}s`;
+      }, 1000);
+    }
+
+    // events
+    el('#refreshBtn').onclick = ()=> load();
+    el('#q').oninput = ()=> load(); // re-render with filter
+    symbolFilter.onchange = ()=> load();
+
+    load(); // initial
+  </script>
 </body>
 </html>
