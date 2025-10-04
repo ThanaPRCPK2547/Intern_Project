@@ -1,0 +1,38 @@
+{
+  "build_id": "2025-10-04T19:07:38Z",
+  "generated_at_utc": "2025-10-04T19:07:38Z",
+  "refresh_suggested_sec": 300,
+  "summary": {
+    "total_symbols": 2,
+    "top_gainer": {
+      "symbol": "capybara",
+      "change_pct": 0
+    }
+  },
+  "charts": [
+    {
+      "symbol": "capybara",
+      "interval": "test_output",
+      "image": "output/capybara_test_output.png",
+      "last_point_utc": "2025-10-04T19:02:46Z",
+      "metrics": {
+        "close": 66,
+        "change": 8,
+        "change_pct": -2,
+        "volume": 99.87
+      }
+    },
+    {
+      "symbol": "cat",
+      "interval": "test_output",
+      "image": "output/cat_test_output.png",
+      "last_point_utc": "2025-10-04T18:46:21Z",
+      "metrics": {
+        "close": 99,
+        "change": 55,
+        "change_pct": 23,
+        "volume": -9.88
+      }
+    }
+  ]
+}
